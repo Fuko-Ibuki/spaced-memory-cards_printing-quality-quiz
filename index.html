@@ -221,7 +221,7 @@ button:focus-visible{ outline-offset:2px; }
 }
 .streak-pill .flame{ font-size:14px; filter:drop-shadow(0 0 6px color-mix(in srgb, var(--gold) 60%, transparent)); }
 .streak-pill.streak-placeholder{
-  display:flex;
+  display:none;
   visibility:hidden;
   pointer-events:none;
 }
@@ -1010,7 +1010,7 @@ body.view-swipe-active{ overscroll-behavior-x:contain; }
    ============================================================ */
 @media (max-width:640px){
   .topnav{
-    position:sticky; top:0; z-index:40;
+    position:relative;
     display:flex; align-items:center; justify-content:space-between;
     padding:10px 12px; gap:8px;
     min-height:48px;
@@ -1020,7 +1020,7 @@ body.view-swipe-active{ overscroll-behavior-x:contain; }
   .nav-spacer{ display:none; }
   .format-guide-grid{ grid-template-columns:1fr; }
   .streak-pill{ padding:5px 9px 5px 7px; font-size:12px; }
-  .streak-pill.streak-placeholder{ display:flex; visibility:hidden; }
+  .streak-pill.streak-placeholder{ display:none; visibility:hidden; }
   .nav-tabs{
     position:absolute;
     left:50%;
@@ -1033,6 +1033,22 @@ body.view-swipe-active{ overscroll-behavior-x:contain; }
   }
   .nav-tab{ padding:7px 12px; }
   .icon-btn{ position:relative; z-index:2; margin-left:auto; }
+  .topnav.has-streak{
+    display:grid; grid-template-columns:auto auto auto auto; justify-content:space-between;
+    gap:0;
+  }
+  .topnav.has-streak .brand{ grid-column:1; }
+  .topnav.has-streak .streak-pill{ grid-column:2; justify-self:start; }
+  .topnav.has-streak .nav-tabs{
+    grid-column:3; position:static; transform:none; max-width:100%; justify-self:center;
+  }
+  .topnav.has-streak .icon-btn{ grid-column:4; position:relative; margin-left:0; justify-self:end; }
+  .topnav.preview-fixed{
+    position:fixed; left:0; right:0; top:0; z-index:90;
+  }
+  .topnav.preview-fixed + main#view{
+    padding-top:76px;
+  }
   .container{ padding:0 14px; }
   .setup-container{ display:flex; flex-direction:column; padding-bottom:28px; }
   .setup-container .deck-info-card{ order:1; }
@@ -1072,15 +1088,18 @@ body.view-swipe-active{ overscroll-behavior-x:contain; }
   .rate-btn{ font-size:11.5px; padding:11px 4px; }
   .rate-btn .kbd{ display:none; }
   .report-hero .score-big{ font-size:56px; }
+  .qa-list .qa-item:not(.open) .qa-detail{ max-height:0; }
   .deck-info-card{ flex-wrap:wrap; gap:12px; }
   .deck-info-card > div{ flex:1 1 calc(100% - 52px); }
   .deck-info-card #browse-deck-btn,.deck-info-card .swap{ flex:1 1 calc(50% - 6px); margin-left:0; }
   .self-grade-grid{ grid-template-columns:repeat(2,1fr); }
   .browse-topbar{
-    top:61px; align-items:center; justify-content:center;
+    top:61px;
+    align-items:center; justify-content:center;
     padding:10px 14px 12px; margin-bottom:14px; border-bottom:none;
     overflow:visible; background:transparent; backdrop-filter:none;
   }
+  .view-pad.has-fixed-previewbar{ padding-top:28px; }
   .view-pad.has-fixed-previewbar.fade-in{ animation:none; }
   .browse-filter-pack{
     flex:0 1 auto; min-width:0; width:100%;
@@ -1106,12 +1125,22 @@ body.view-swipe-active{ overscroll-behavior-x:contain; }
     white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
   }
   .record-mobile-title p{ margin:5px 0 0; color:var(--text-faint); font-size:12.5px; line-height:1.5; }
+  .stats-grid{ gap:8px; margin-bottom:16px; }
+  .big-stat{ border-radius:var(--radius-md); padding:12px 10px; }
+  .big-stat .icon{ font-size:15px; margin-bottom:5px; }
+  .big-stat .v{ font-size:21px; }
+  .big-stat .l{ font-size:10.5px; line-height:1.25; }
+  .settings-actions{ flex-wrap:nowrap; gap:6px; }
+  .settings-actions .btn{ flex:1 1 0; min-width:0; padding:10px 8px; font-size:12px; white-space:nowrap; }
   .browse-topbar .browse-answer-fixed,
   .record-topbar .browse-answer-fixed{
     position:fixed; right:14px; bottom:calc(14px + env(safe-area-inset-bottom, 0px));
     z-index:170; margin:0; padding:8px 10px 8px 12px;
     box-shadow:var(--shadow-pop);
   }
+  .wrong-test-strip{ justify-content:center; text-align:center; }
+  .wrong-test-strip > div{ flex:1 1 100%; }
+  .wrong-test-strip .btn{ margin:0 auto; }
   .browse-filter-line,#browse-back-btn{ display:none; }
   .browse-shell{ padding-bottom:76px; }
   .browse-nav-toggle{
@@ -1143,21 +1172,22 @@ body.view-swipe-active{ overscroll-behavior-x:contain; }
   .browse-inline-answer{ min-width:76px; }
   .browse-sidebar.mobile-collapsed{ display:none; }
   .browse-main .empty-state{ display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; min-height:46vh; margin:0 auto; }
-  .chart-panel{ padding:18px 14px; min-height:0; overflow:visible; }
-  .trend-chart-panel{ --sparkline-h:190px; }
+  .chart-panel{ padding:16px 14px; min-height:0; overflow:visible; }
+  .chart-panel h4{ margin-bottom:10px; }
+  .trend-chart-panel{ --sparkline-h:168px; padding:16px 14px 12px; }
   .trend-chart-panel .sparkline-scroll{
-    margin:0 -2px; padding:2px 2px 6px;
-    height:calc(var(--sparkline-h) + 8px); max-height:none; line-height:0;
-    box-sizing:content-box;
+    margin:0 -2px; padding:0 2px;
+    height:var(--sparkline-h); max-height:var(--sparkline-h); line-height:0;
+    box-sizing:border-box;
     -webkit-overflow-scrolling:touch;
   }
   .trend-chart-panel svg.sparkline-chart{
     height:var(--sparkline-h) !important; min-height:0; max-height:none;
     aspect-ratio:auto !important; display:block;
   }
-  .trend-chart-panel svg.sparkline-chart text{ font-size:24px !important; font-weight:800; }
-  .trend-chart-panel svg.sparkline-chart .sparkline-line{ stroke-width:7 !important; }
-  .trend-chart-panel svg.sparkline-chart .sparkline-dot{ r:8px; }
+  .trend-chart-panel svg.sparkline-chart text{ font-size:20px !important; font-weight:800; }
+  .trend-chart-panel svg.sparkline-chart .sparkline-line{ stroke-width:5.5 !important; }
+  .trend-chart-panel svg.sparkline-chart .sparkline-dot{ r:6.5px; }
   .tb-row{ gap:8px; }
   .tb-row .tb-label{ width:64px; font-size:12px; }
   .tb-row .tb-pct{ width:48px; font-size:11.5px; }
@@ -1655,13 +1685,11 @@ function capturePreviewAnchor(container){
 }
 function restorePreviewAnchor(container, anchor){
   if (!anchor || !anchor.id) return;
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{
-    const target = document.getElementById(anchor.id);
-    if (!target) return;
-    const top = previewViewportTop(container);
-    const shift = target.getBoundingClientRect().top - top - anchor.delta;
-    if (Math.abs(shift) > 1) window.scrollBy({ top:shift, behavior:'auto' });
-  }));
+  const target = document.getElementById(anchor.id);
+  if (!target) return;
+  const top = previewViewportTop(container);
+  const nextTop = window.scrollY + target.getBoundingClientRect().top - top - anchor.delta;
+  if (Math.abs(nextTop - window.scrollY) > 1) window.scrollTo({ top:nextTop, behavior:'auto' });
 }
 function matchesChapter(q, s){
   return !s.chapterFilter || s.chapterFilter==='all' || q.chapter===s.chapterFilter;
@@ -1795,6 +1823,9 @@ function renderNav(){
   if (!App.progress){ nav.style.display='none'; return; }
   nav.style.display='';
   const streak = App.progress.streak.current;
+  nav.classList.toggle('has-streak', streak>0);
+  nav.classList.toggle('no-streak', streak<=0);
+  nav.classList.toggle('preview-fixed', ['browse','record'].includes(App.view));
   const studyActive = ['load','setup','quiz','grading','report'].includes(App.view);
   nav.innerHTML = `
     <div class="brand"><span class="brand-mark">🗂️</span><span class="brand-text">Spaced Memory Cards</span></div>
@@ -2149,6 +2180,12 @@ function tfPolarityCounts(deck){
   const falseCount = tf.filter(q=>q.answer===false).length;
   return { total:tf.length, trueCount, falseCount };
 }
+function tfPolarityCountsFromQuestions(questions){
+  const tf = (questions || []).filter(q=>q.type==='trueFalse');
+  const trueCount = tf.filter(q=>q.answer===true).length;
+  const falseCount = tf.filter(q=>q.answer===false).length;
+  return { total:tf.length, trueCount, falseCount };
+}
 async function finishDeckLoad(deck, opts={}){
   App.deck = deck;
   App.srs = await loadSrs(deck.id);
@@ -2270,13 +2307,6 @@ function planMockExam(deck, s, targetScore){
 }
 function renderSetupView(container){
   const deck = App.deck, s = App.settings;
-  const presentTypes = TYPE_ORDER.filter(t=>deck.byType[t] && deck.byType[t].length);
-  const typeChips = presentTypes.map(t=>{
-    const on = !!s.includeTypes[t];
-    return `<button type="button" class="type-chip ${on?'on':''}" data-type="${t}">
-      <span class="chip-check">${on?'✓':'○'}</span>${QuestionTypes[t].label}<span class="cnt">${deck.byType[t].length}</span>
-    </button>`;
-  }).join('');
   const modeCards = ['flashcard','learn','test'].map(key=>{
     const m = MODE_INFO[key];
     return `<button type="button" class="mode-card ${s.mode===key?'selected':''}" data-mode="${key}">
@@ -2285,6 +2315,17 @@ function renderSetupView(container){
   }).join('');
   const chapters = getChapters(deck);
   if (s.chapterFilter!=='all' && !chapters.includes(s.chapterFilter)) s.chapterFilter = 'all';
+  const chapterQs = deck.questions.filter(q=>matchesChapter(q, s));
+  const scopedQs = chapterQs.filter(q=>matchesSourceScope(q, s, deck.id));
+  const scopedByType = {};
+  TYPE_ORDER.forEach(t=>{ scopedByType[t] = scopedQs.filter(q=>q.type===t); });
+  const presentTypes = TYPE_ORDER.filter(t=>scopedByType[t] && scopedByType[t].length);
+  const typeChips = presentTypes.map(t=>{
+    const on = !!s.includeTypes[t];
+    return `<button type="button" class="type-chip ${on?'on':''}" data-type="${t}">
+      <span class="chip-check">${on?'✓':'○'}</span>${QuestionTypes[t].label}<span class="cnt">${scopedByType[t].length}</span>
+    </button>`;
+  }).join('');
   if (typeof s.questionLimit==='number'){
     s.questionLimit = Utils.clamp(Math.floor(s.questionLimit)||1, 1, Math.max(1, deck.totalQuestions));
   }
@@ -2301,15 +2342,17 @@ function renderSetupView(container){
     + `<button type="button" data-qty="all" class="${s.questionLimit==='all'?'active':''}">全部</button>`;
   const customQtyVal = (typeof s.questionLimit==='number' && !quickNums.includes(s.questionLimit)) ? s.questionLimit : '';
   const mockPreviewLine = mockPlan ? TYPE_ORDER.filter(t=>mockPlan.counts[t]>0).map(t=>`${QuestionTypes[t].label} ${mockPlan.counts[t]}题`).join('、') : '';
-  const tfPol = tfPolarityCounts(deck);
+  const tfPol = tfPolarityCountsFromQuestions(scopedQs);
   const showTfFilter = s.mode!=='test' && s.includeTypes.trueFalse && tfPol.trueCount>0 && tfPol.falseCount>0;
-  const reviewCount = getDeckUidList('review', deck.id).filter(uid=>findDeckQuestion(uid)).length;
-  const wrongCount = getDeckUidList('wrong', deck.id).filter(uid=>findDeckQuestion(uid)).length;
+  const reviewSet = getDeckUidSet('review', deck.id);
+  const wrongSet = getDeckUidSet('wrong', deck.id);
+  const reviewCount = chapterQs.filter(q=>reviewSet.has(q.uid)).length;
+  const wrongCount = chapterQs.filter(q=>wrongSet.has(q.uid)).length;
   const sourceScope = s.sourceScope || 'all';
   const sourceScopeHtml = [
-    {key:'all', label:'全部题库', count:deck.totalQuestions},
-    {key:'review', label:'复习本', count:reviewCount},
-    {key:'wrong', label:'错题本', count:wrongCount}
+    {key:'all', label:'全部题库', count:chapterQs.length},
+    {key:'wrong', label:'错题本', count:wrongCount},
+    {key:'review', label:'复习本', count:reviewCount}
   ].map(x=>`<button type="button" data-source-scope="${x.key}" class="${sourceScope===x.key?'active':''}">${x.label} ${x.count}</button>`).join('');
   const chapterHtml = chapters.length ? `
     <div class="chapter-filter-row">
@@ -2972,8 +3015,8 @@ function renderQuestionTools(card){
   const starred = isInNotebook('review', card.uid, App.deck.id);
   const wrong = isInNotebook('wrong', card.uid, App.deck.id);
   return `<div class="qcard-tools">
-    <button type="button" class="bookmark-btn ${starred?'on':''}" data-bookmark="${card.uid}" title="${starred?'移出复习本':'加入复习本'}" aria-label="${starred?'移出复习本':'加入复习本'}" aria-pressed="${starred?'true':'false'}">${starred?'★':'☆'}</button>
     ${wrong ? `<span class="wrong-chip">错题本</span>` : ''}
+    <button type="button" class="bookmark-btn ${starred?'on':''}" data-bookmark="${card.uid}" title="${starred?'移出复习本':'加入复习本'}" aria-label="${starred?'移出复习本':'加入复习本'}" aria-pressed="${starred?'true':'false'}">${starred?'★':'☆'}</button>
   </div>`;
 }
 function renderFlashcardFace(sess, card){
@@ -3528,8 +3571,8 @@ function renderBrowseView(container){
   const wrongCount = getDeckUidList('wrong', deck.id).filter(uid=>findDeckQuestion(uid)).length;
   const scopeButtons = [
     {key:'all', label:'整卷', count:deck.totalQuestions},
-    {key:'review', label:'复习本', count:getDeckUidList('review', deck.id).filter(uid=>findDeckQuestion(uid)).length},
-    {key:'wrong', label:'错题本', count:wrongCount}
+    {key:'wrong', label:'错题本', count:wrongCount},
+    {key:'review', label:'复习本', count:getDeckUidList('review', deck.id).filter(uid=>findDeckQuestion(uid)).length}
   ].map(x=>`<button type="button" data-browse-scope="${x.key}" class="${scope===x.key?'active':''}">${x.label} ${x.count}</button>`).join('');
   const chapterFilterHtml = chapters.length ? `<div class="browse-filter-line"><span>筛选章节</span>${chapterDropdownHtml(chapters, selectedChapters)}${selectedChapters.length ? '<button type="button" class="chapter-clear-btn" data-browse-chapter-clear="1">清除筛选</button>' : ''}</div>` : '';
   const wrongTestStrip = scope==='wrong' && wrongCount>0 ? `
@@ -3683,8 +3726,8 @@ function renderPreviewQuestion(q, num, opts={}){
   const starred = App.deck && isInNotebook('review', q.uid, App.deck.id);
   const wrong = App.deck && isInNotebook('wrong', q.uid, App.deck.id);
   const actions = opts.actions ? `<div class="preview-actions">
-    <button type="button" class="bookmark-btn ${starred?'on':''}" data-review-toggle="${q.uid}" title="${starred?'移出复习本':'加入复习本'}" aria-label="${starred?'移出复习本':'加入复习本'}" aria-pressed="${starred?'true':'false'}">${starred?'★':'☆'}</button>
     ${wrong ? `<button type="button" class="mini-remove-btn" data-wrong-remove="${q.uid}">移出错题本</button>` : ''}
+    <button type="button" class="bookmark-btn ${starred?'on':''}" data-review-toggle="${q.uid}" title="${starred?'移出复习本':'加入复习本'}" aria-label="${starred?'移出复习本':'加入复习本'}" aria-pressed="${starred?'true':'false'}">${starred?'★':'☆'}</button>
   </div>` : '';
   let bodyHtml = '';
   if ((q.type==='singleChoice' || q.type==='multipleChoice') && Array.isArray(q.options)){
@@ -3788,7 +3831,8 @@ function renderReportView(container){
       <div class="section-title" style="margin-top:22px;">逐题详情<span class="line"></span></div>
       <div class="qa-list">${qaListHtml}</div>
       <div class="report-actions">
-        <button class="btn btn-secondary" id="report-stats-btn" type="button">${r.partial?'返回设置':'查看统计'}</button>
+        <button class="btn btn-secondary" id="report-preview-btn" type="button">${r.partial?'返回设置':'整卷预览'}</button>
+        <button class="btn btn-secondary" id="report-study-btn" type="button">返回学习</button>
         <button class="btn btn-primary" id="report-restart-btn" type="button">再来一轮</button>
       </div>
     </div>
@@ -3809,7 +3853,13 @@ function renderReportView(container){
     });
   });
   document.getElementById('report-restart-btn').onclick = startSession;
-  document.getElementById('report-stats-btn').onclick = ()=>{ App.view=r.partial?'setup':'stats'; render(); };
+  document.getElementById('report-study-btn').onclick = ()=>{ App.view='setup'; render(); };
+  document.getElementById('report-preview-btn').onclick = ()=>{
+    if (r.partial){ App.view='setup'; render(); return; }
+    App.recordDetailId = r.id;
+    App.view='record';
+    render();
+  };
 }
 function animateScoreCounter(target){
   const el = document.getElementById('score-counter');
@@ -3835,8 +3885,8 @@ function buildTypeBarChart(items){
 function buildSparkline(values){
   if (!values.length) return `<div class="chart-empty">还没有学习记录</div>`;
   const mobileChart = isMobileViewport();
-  const mobileH = 190;
-  const w=600,h=mobileChart?mobileH:150,padL=58,padR=8,padY=mobileChart?30:22;
+  const mobileH = 168;
+  const w=600,h=mobileChart?mobileH:150,padL=58,padR=8,padY=mobileChart?24:22;
   const cssWidthPx = Math.max(260, Math.round((Math.max(1, values.length-1) * 42) + 148));
   const n=values.length, stepX = n>1 ? (w-padL-padR)/(n-1) : 0;
   const points = values.map((v,i)=>[ padL+i*stepX, padY+(1-Utils.clamp(v,0,100)/100)*(h-2*padY) ]);
@@ -3845,7 +3895,7 @@ function buildSparkline(values){
   const dots = points.map(p=>`<circle class="sparkline-dot" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.5" fill="var(--accent)"/>`).join('');
   const gridLines = [0,50,100].map(v=>{
     const y=padY+(1-v/100)*(h-2*padY);
-    return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${w-padR}" y2="${y.toFixed(1)}" stroke="var(--border-soft)" stroke-width="1"/><text x="4" y="${(y+(mobileChart?8:4)).toFixed(1)}" font-size="${mobileChart?22:12}" fill="var(--text-faint)">${v}</text>`;
+    return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${w-padR}" y2="${y.toFixed(1)}" stroke="var(--border-soft)" stroke-width="1"/><text x="4" y="${(y+(mobileChart?7:4)).toFixed(1)}" font-size="${mobileChart?20:12}" fill="var(--text-faint)">${v}</text>`;
   }).join('');
   const heightStyle = mobileChart ? '' : 'height:auto;';
   return `<div class="sparkline-scroll"><svg class="sparkline-chart" viewBox="0 0 ${w} ${h}" style="width:max(100%, ${cssWidthPx}px);min-width:100%;aspect-ratio:${w}/${h};${heightStyle}overflow:visible;display:block;">
