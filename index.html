@@ -242,7 +242,17 @@ button:focus-visible{ outline-offset:2px; }
 .icon-btn svg{ width:16px; height:16px; display:block; flex:0 0 16px; margin:auto; overflow:visible; }
 .icon-btn:hover{ background:var(--bg-hover); color:var(--text); transform:translateY(-1px); }
 
-main#view{ flex:1; display:flex; flex-direction:column; }
+main#view{ flex:1; display:flex; flex-direction:column; position:relative; z-index:30; background:var(--bg); will-change:transform, opacity; touch-action:pan-y; }
+main#view.view-dragging{ transition:none; }
+main#view.view-snap{ transition:transform .34s cubic-bezier(.22,1,.36,1), opacity .34s cubic-bezier(.22,1,.36,1); }
+body.view-swipe-active{ overscroll-behavior-x:contain; }
+.view-swipe-preview{
+  position:fixed; left:0; right:0; top:60px; bottom:0; z-index:20;
+  display:flex; flex-direction:column; overflow:hidden; background:var(--bg);
+  pointer-events:none; opacity:0; transform:translate3d(0,0,0);
+  will-change:transform, opacity;
+}
+.view-swipe-preview.view-snap{ transition:opacity .34s cubic-bezier(.22,1,.36,1); }
 
 /* ============================================================
    4. 按钮
@@ -978,6 +988,7 @@ main#view{ flex:1; display:flex; flex-direction:column; }
 .record-title{ flex:1; min-width:0; }
 .record-title h2{ font-size:18px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .record-title p{ margin:4px 0 0; color:var(--text-faint); font-size:12.5px; }
+.record-mobile-title{ display:none; }
 .record-paper .browse-q{ scroll-margin-top:148px; }
 .history-date-cell span{ display:inline; }
 .history-date-cell span + span::before{ content:" "; }
@@ -1057,9 +1068,19 @@ main#view{ flex:1; display:flex; flex-direction:column; }
   .browse-filter-pack > .seg button{
     flex:0 0 auto; padding:7px 12px; white-space:nowrap;
   }
-  .record-topbar{ top:61px; align-items:flex-start; flex-wrap:wrap; }
-  .record-title{ order:3; flex-basis:100%; }
-  .record-title h2{ white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .record-topbar{
+    top:61px; align-items:flex-start; flex-wrap:wrap;
+    background:transparent; backdrop-filter:none;
+  }
+  .record-topbar .record-title{ display:none; }
+  .record-mobile-title{
+    display:block; margin:0 0 16px; padding:0 2px;
+  }
+  .record-mobile-title h2{
+    font-size:17px; line-height:1.45; color:var(--text);
+    white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  }
+  .record-mobile-title p{ margin:5px 0 0; color:var(--text-faint); font-size:12.5px; line-height:1.5; }
   .browse-topbar .browse-answer-fixed,
   .record-topbar .browse-answer-fixed{
     position:fixed; right:14px; bottom:calc(14px + env(safe-area-inset-bottom, 0px));
@@ -1095,18 +1116,20 @@ main#view{ flex:1; display:flex; flex-direction:column; }
   .browse-sidebar.mobile-collapsed{ display:none; }
   .browse-main .empty-state{ display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; min-height:46vh; margin:0 auto; }
   .chart-panel{ padding:18px 14px; min-height:0; overflow:visible; }
-  .sparkline-scroll{
+  .trend-chart-panel{ --sparkline-h:190px; }
+  .trend-chart-panel .sparkline-scroll{
     margin:0 -2px; padding:2px 2px 6px;
-    height:auto; max-height:none; line-height:0;
+    height:calc(var(--sparkline-h) + 8px); max-height:none; line-height:0;
+    box-sizing:content-box;
     -webkit-overflow-scrolling:touch;
   }
-  .chart-panel svg.sparkline-chart{
-    height:180px !important; min-height:0; max-height:180px;
-    aspect-ratio:auto !important; contain:size layout;
+  .trend-chart-panel svg.sparkline-chart{
+    height:var(--sparkline-h) !important; min-height:0; max-height:none;
+    aspect-ratio:auto !important; display:block;
   }
-  .chart-panel svg.sparkline-chart text{ font-size:24px !important; font-weight:800; }
-  .chart-panel svg.sparkline-chart .sparkline-line{ stroke-width:7 !important; }
-  .chart-panel svg.sparkline-chart .sparkline-dot{ r:8px; }
+  .trend-chart-panel svg.sparkline-chart text{ font-size:24px !important; font-weight:800; }
+  .trend-chart-panel svg.sparkline-chart .sparkline-line{ stroke-width:7 !important; }
+  .trend-chart-panel svg.sparkline-chart .sparkline-dot{ r:8px; }
   .tb-row{ gap:8px; }
   .tb-row .tb-label{ width:64px; font-size:12px; }
   .tb-row .tb-pct{ width:48px; font-size:11.5px; }
@@ -1709,14 +1732,17 @@ function render(){
   const view = document.getElementById('view');
   view.innerHTML = '';
   view.className = '';
-  if (App.view==='load') renderLoadView(view);
-  else if (App.view==='setup') renderSetupView(view);
-  else if (App.view==='quiz') renderQuizView(view);
-  else if (App.view==='grading') renderGradingView(view);
-  else if (App.view==='report') renderReportView(view);
-  else if (App.view==='stats') renderStatsView(view);
-  else if (App.view==='record') renderRecordDetailView(view);
-  else if (App.view==='browse') renderBrowseView(view);
+  renderViewContent(App.view, view);
+}
+function renderViewContent(viewName, view){
+  if (viewName==='load') renderLoadView(view);
+  else if (viewName==='setup') renderSetupView(view);
+  else if (viewName==='quiz') renderQuizView(view);
+  else if (viewName==='grading') renderGradingView(view);
+  else if (viewName==='report') renderReportView(view);
+  else if (viewName==='stats') renderStatsView(view);
+  else if (viewName==='record') renderRecordDetailView(view);
+  else if (viewName==='browse') renderBrowseView(view);
   else renderLoadView(view);
 }
 function renderNav(){
@@ -1744,6 +1770,157 @@ function goStudyHome(){
   else if (App.deck){ App.view='setup'; }
   else { App.view='load'; }
   render();
+}
+function canUseViewSwipe(e){
+  if (!isMobileViewport()) return false;
+  if (document.getElementById('modal-overlay')) return false;
+  if (e.target && e.target.closest('input,textarea,select,button,a,.sparkline-scroll,.deck-switcher,.history-table,.chapter-menu,.browse-sidebar')) return false;
+  return ['setup','report','stats'].includes(App.view);
+}
+function setupMobileViewSwipe(){
+  let startX=0, startY=0, startT=0, tracking=false, dragging=false, lastDx=0, preview=null, swipeDir=0, validSwipe=false;
+  const allowedDirection = ()=>{
+    if (['load','setup','report'].includes(App.view)) return -1;
+    if (App.view==='stats') return 1;
+    return 0;
+  };
+  const targetViewFor = (dir)=>{
+    if (dir<0) return 'stats';
+    if (dir>0){
+      if (App.session && App.session.status==='active') return App.session.phase==='grading' ? 'grading' : 'quiz';
+      if (App.deck) return 'setup';
+      return 'load';
+    }
+    return App.view;
+  };
+  const viewEl = ()=>document.getElementById('view');
+  const setViewFade = (opacity=1, progress=0)=>{
+    const el = viewEl();
+    if (!el) return;
+    el.style.transform = '';
+    el.style.opacity = String(opacity);
+    if (preview){
+      preview.style.transform = '';
+      preview.style.opacity = String(Math.min(1, progress));
+    }
+  };
+  const setInvalidPull = (dx)=>{
+    const el = viewEl();
+    if (!el) return;
+    el.style.transform = `translate3d(${dx}px,0,0)`;
+    el.style.opacity = '1';
+  };
+  const removePreview = ()=>{
+    if (preview && preview.parentNode) preview.parentNode.removeChild(preview);
+    preview = null;
+  };
+  const ensurePreview = (dir)=>{
+    if (preview) return preview;
+    preview = document.createElement('div');
+    preview.className = 'view-swipe-preview';
+    const previousView = App.view;
+    renderViewContent(targetViewFor(dir), preview);
+    App.view = previousView;
+    preview.style.transform = '';
+    preview.style.opacity = '0';
+    document.body.appendChild(preview);
+    return preview;
+  };
+  const armSnap = (el)=>{
+    if (!el) return;
+    el.classList.remove('view-dragging');
+    void el.offsetWidth;
+    el.classList.add('view-snap');
+  };
+  const clearViewMotion = ()=>{
+    const el = viewEl();
+    document.body.classList.remove('view-swipe-active');
+    if (!el) return;
+    el.classList.remove('view-dragging','view-snap');
+    el.style.transform = '';
+    el.style.opacity = '';
+    removePreview();
+  };
+  const snapBack = ()=>{
+    const el = viewEl();
+    if (!el) return;
+    const dir = swipeDir || allowedDirection() || Math.sign(lastDx) || 1;
+    armSnap(el);
+    if (preview) armSnap(preview);
+    setViewFade(1,0);
+    setTimeout(clearViewMotion, 360);
+  };
+  const finishSwipe = (dir)=>{
+    const el = viewEl();
+    if (!el) return;
+    armSnap(el);
+    if (preview) armSnap(preview);
+    setViewFade(0,1);
+    setTimeout(()=>{
+      removePreview();
+      if (dir<0){ App.view='stats'; render(); }
+      else goStudyHome();
+      requestAnimationFrame(()=>{
+        const next = viewEl();
+        if (!next) return;
+        next.classList.add('view-snap');
+        next.style.transform = '';
+        next.style.opacity = '0';
+        void next.offsetWidth;
+        requestAnimationFrame(()=>setViewFade(1,0));
+        setTimeout(clearViewMotion, 360);
+      });
+    }, 180);
+  };
+  document.addEventListener('touchstart', e=>{
+    if (!e.touches || e.touches.length!==1 || !canUseViewSwipe(e)){ tracking=false; return; }
+    const t = e.touches[0];
+    startX = t.clientX; startY = t.clientY; startT = Date.now(); tracking = true; dragging=false; lastDx=0; swipeDir=0; validSwipe=false;
+  }, {passive:true});
+  document.addEventListener('touchmove', e=>{
+    if (!tracking || !e.touches || e.touches.length!==1) return;
+    const dir = allowedDirection();
+    if (!dir) return;
+    const t = e.touches[0];
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    if (!dragging && (Math.abs(dx)<12 || Math.abs(dx)<Math.abs(dy)*1.15)) return;
+    const moveDir = Math.sign(dx);
+    if (!moveDir) return;
+    validSwipe = moveDir===dir;
+    swipeDir = validSwipe ? dir : moveDir;
+    dragging = true;
+    lastDx = dx;
+    if (validSwipe) ensurePreview(dir);
+    const el = viewEl();
+    if (el) el.classList.add('view-dragging');
+    document.body.classList.add('view-swipe-active');
+    e.preventDefault();
+    const width = window.innerWidth || 360;
+    if (validSwipe){
+      const progress = Math.min(1, Math.abs(dx)/(width*.62));
+      setViewFade(1 - progress*.82, progress);
+    } else {
+      const resisted = moveDir * Math.min(54, Math.pow(Math.abs(dx), .72) * 3.2);
+      setInvalidPull(resisted);
+    }
+  }, {passive:false});
+  document.addEventListener('touchend', e=>{
+    if (!tracking || !e.changedTouches || e.changedTouches.length!==1){ tracking=false; return; }
+    tracking = false;
+    if (!canUseViewSwipe(e)){ clearViewMotion(); return; }
+    const t = e.changedTouches[0];
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    const dt = Date.now() - startT;
+    const dir = allowedDirection();
+    if (!dragging || !dir){ clearViewMotion(); return; }
+    const fastEnough = dt<420 && Math.abs(dx)>52;
+    const farEnough = Math.abs(lastDx)>Math.min(130,(window.innerWidth||360)*.28);
+    if (validSwipe && Math.sign(dx)===dir && Math.abs(dx)>=Math.abs(dy)*1.25 && (fastEnough || farEnough)) finishSwipe(dir);
+    else snapBack();
+  }, {passive:true});
+  document.addEventListener('touchcancel', ()=>{ tracking=false; dragging=false; snapBack(); }, {passive:true});
 }
 function systemPrefersDark(){
   return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -3274,6 +3451,7 @@ function handleGlobalKeydown(e){
   }
 }
 document.addEventListener('keydown', handleGlobalKeydown);
+setupMobileViewSwipe();
 
 /* ============================================================
    §16. 视图：结果报告
@@ -3590,7 +3768,9 @@ function buildTypeBarChart(items){
 }
 function buildSparkline(values){
   if (!values.length) return `<div class="chart-empty">还没有学习记录</div>`;
-  const w=600,h=150,padL=58,padR=8,padY=22;
+  const mobileChart = isMobileViewport();
+  const mobileH = 190;
+  const w=600,h=mobileChart?mobileH:150,padL=58,padR=8,padY=mobileChart?30:22;
   const cssWidthPx = Math.max(260, Math.round((Math.max(1, values.length-1) * 42) + 148));
   const n=values.length, stepX = n>1 ? (w-padL-padR)/(n-1) : 0;
   const points = values.map((v,i)=>[ padL+i*stepX, padY+(1-Utils.clamp(v,0,100)/100)*(h-2*padY) ]);
@@ -3599,9 +3779,10 @@ function buildSparkline(values){
   const dots = points.map(p=>`<circle class="sparkline-dot" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.5" fill="var(--accent)"/>`).join('');
   const gridLines = [0,50,100].map(v=>{
     const y=padY+(1-v/100)*(h-2*padY);
-    return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${w-padR}" y2="${y.toFixed(1)}" stroke="var(--border-soft)" stroke-width="1"/><text x="4" y="${(y+4).toFixed(1)}" font-size="12" fill="var(--text-faint)">${v}</text>`;
+    return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${w-padR}" y2="${y.toFixed(1)}" stroke="var(--border-soft)" stroke-width="1"/><text x="4" y="${(y+(mobileChart?8:4)).toFixed(1)}" font-size="${mobileChart?22:12}" fill="var(--text-faint)">${v}</text>`;
   }).join('');
-  return `<div class="sparkline-scroll"><svg class="sparkline-chart" viewBox="0 0 ${w} ${h}" style="width:max(100%, ${cssWidthPx}px);min-width:100%;aspect-ratio:${w}/${h};height:auto;overflow:visible;display:block;">
+  const heightStyle = mobileChart ? '' : 'height:auto;';
+  return `<div class="sparkline-scroll"><svg class="sparkline-chart" viewBox="0 0 ${w} ${h}" style="width:max(100%, ${cssWidthPx}px);min-width:100%;aspect-ratio:${w}/${h};${heightStyle}overflow:visible;display:block;">
     ${gridLines}
     <path d="${areaD}" fill="var(--accent-glow)" stroke="none"/>
     <path class="sparkline-line" d="${pathD}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -3673,6 +3854,10 @@ function renderRecordDetailView(container){
       </div>
       <div class="browse-shell">
         <div class="browse-main record-paper">
+          <div class="record-mobile-title">
+            <h2>${Utils.escapeHtml(contextLabel)}</h2>
+            <p>${Utils.fmtDateTime(record.startedAt)} · ${record.score}/${record.maxScore} 分 · ${record.percentage}%</p>
+          </div>
           ${groupedHtml || `<div class="empty-state"><span class="e-icon">□</span><p>这条记录没有逐题详情</p></div>`}
         </div>
         <div class="browse-sidebar mobile-collapsed">${sidebarHtml}</div>
@@ -3746,7 +3931,7 @@ function renderStatsView(container){
         <div class="big-stat"><span class="icon">✍️</span><div class="v">${p.totals.totalQuestionsAnswered}</div><div class="l">累计答题数</div></div>
         <div class="big-stat"><span class="icon">⏱️</span><div class="v">${Utils.fmtClock(p.totals.totalTimeMs)}</div><div class="l">累计学习时长</div></div>
       </div>
-      <div class="panel chart-panel"><h4>最近正确率趋势</h4>${trendChart}</div>
+      <div class="panel chart-panel trend-chart-panel"><h4>最近正确率趋势</h4>${trendChart}</div>
       <div class="panel chart-panel"><h4>各题型累计得分率</h4>${typeChart}</div>
       <div class="section-title">学习记录<span class="line"></span></div>
       ${sessions.length ? `<p class="muted record-preview-hint">点击任意记录可进入整卷预览，右侧导航栏会标出正误并可快速定位。</p>` : ''}
