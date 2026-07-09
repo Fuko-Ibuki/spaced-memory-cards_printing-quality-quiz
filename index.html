@@ -1075,6 +1075,12 @@ body.view-swipe-active{ overscroll-behavior-x:contain; }
   .start-bar{ flex-direction:column; align-items:stretch; gap:10px; margin-top:0; margin-bottom:22px; padding:0 0 6px; border-top:none; overflow:visible; }
   .start-bar .est{ text-align:center; }
   .start-bar .btn-lg{ margin-bottom:3px; }
+  #start-btn.is-empty:disabled{
+    opacity:1; box-shadow:none; transform:none;
+    background:var(--bg-soft); color:var(--text-faint);
+    border:1px solid var(--border-soft);
+    cursor:not-allowed;
+  }
   .deck-switcher{ flex-wrap:nowrap; overflow-x:auto; max-height:none; padding:0 2px 8px; margin:-10px 0 18px; scroll-snap-type:x proximity; }
   .deck-switcher button{ flex:0 0 calc((100% - 16px)/3); max-width:none; justify-content:center; scroll-snap-align:start; }
   .deck-switcher.too-many{ display:none; }
@@ -1199,7 +1205,7 @@ body.view-swipe-active{ overscroll-behavior-x:contain; }
   .history-date-cell span + span::before{ content:""; display:block; }
   .qcard-tools{ top:18px; right:20px; }
   .qcard-type{ padding-right:104px; }
-  .modal-actions{ flex-direction:column-reverse; }
+  .modal-actions{ flex-direction:column; }
   .modal-actions .btn{ width:100%; }
   .toast{ max-width:calc(100vw - 28px); justify-content:center; text-align:center; }
 }
@@ -2341,7 +2347,7 @@ function renderSetupView(container){
   const qtyHtml = quickNums.map(n=>`<button type="button" data-qty="${n}" class="${s.questionLimit===n?'active':''}">${n}题</button>`).join('')
     + `<button type="button" data-qty="all" class="${s.questionLimit==='all'?'active':''}">全部</button>`;
   const customQtyVal = (typeof s.questionLimit==='number' && !quickNums.includes(s.questionLimit)) ? s.questionLimit : '';
-  const mockPreviewLine = mockPlan ? TYPE_ORDER.filter(t=>mockPlan.counts[t]>0).map(t=>`${QuestionTypes[t].label} ${mockPlan.counts[t]}题`).join('、') : '';
+  const mockPreviewLine = mockPlan ? TYPE_ORDER.filter(t=>mockPlan.counts[t]>0).map(t=>`${QuestionTypes[t].label} ${mockPlan.counts[t]} 道`).join('、') : '';
   const tfPol = tfPolarityCountsFromQuestions(scopedQs);
   const showTfFilter = s.mode!=='test' && s.includeTypes.trueFalse && tfPol.trueCount>0 && tfPol.falseCount>0;
   const reviewSet = getDeckUidSet('review', deck.id);
@@ -2374,9 +2380,8 @@ function renderSetupView(container){
         ${App.localDecks.map(d=>`<option value="${d.id}" ${d.id===deck.id?'selected':''}>${Utils.escapeHtml(d.meta.title)}（${d.totalQuestions}题）</option>`).join('')}
       </select>
     </div>` : '';
-  const mockRuleText = hasCompletedDeckOnce(deck)
-    ? '抽题规则：已完成整库首轮，错题本权重最高，复习本权重适度提高；仍会保留题型配比。'
-    : '抽题规则：优先抽取未考过的题目；整库全部完成一遍后，会提高错题本与复习本抽取权重。';
+  const mockRuleText = '抽题规则：优先抽取未完成的题目；题库全部完成一遍后，将提高错题本与复习本的抽取权重。';
+  const startButtonText = previewCount>0 ? `开始学习 (${previewCount}题) →` : '没有可学习题目';
   const mobileLayout = window.matchMedia && window.matchMedia('(max-width:640px)').matches;
   const collapseState = ensureSetupCollapse();
   const activeMobileCollapse = mobileLayout ? ['range','answer','advanced'].find(key=>collapseState[key]) : null;
@@ -2434,7 +2439,7 @@ function renderSetupView(container){
             <button type="button" class="switch ${s.mockExam?'on':''}" data-switch="mockExam" aria-label="模拟考试模式" aria-pressed="${s.mockExam?'true':'false'}"><span class="knob"></span></button>
           </div>
           ${s.mockExam ? `
-            <div class="mock-preview">${mockPlan ? `将抽取 <b>${mockPlan.totalCount}</b> 题：${mockPreviewLine}，合计 <b>${Utils.fmtScore(mockPlan.achievedTotal)}</b> 分${mockPlan.achievedTotal<100?'（题库题量有限，暂无法凑满100分）':''}<br>${mockRuleText}` : '请先勾选至少一种题型'}</div>
+            <div class="mock-preview">${mockPlan ? `将抽取 <b>${mockPlan.totalCount}</b> 道题：${mockPreviewLine}，合计 <b>${Utils.fmtScore(mockPlan.achievedTotal)}</b> 分${mockPlan.achievedTotal<100?'（题库题量有限，暂无法凑满 100 分）':''}<br>${mockRuleText}` : '请先勾选至少一种题型'}</div>
           ` : `
           <div class="section-title" style="margin-top:18px;">题量<span class="line"></span></div>
           <div class="qty-row">
@@ -2476,7 +2481,7 @@ function renderSetupView(container){
 
       <div class="start-bar">
         <div class="est">已选 <b class="num">${previewCount}</b> 题 · 满分 <b class="num">${Utils.fmtScore(previewScore)}</b> 分</div>
-        <button class="btn btn-primary btn-lg" id="start-btn" type="button" ${previewCount===0?'disabled':''}>开始学习 (${previewCount}题) →</button>
+        <button class="btn btn-primary btn-lg ${previewCount===0?'is-empty':''}" id="start-btn" type="button" ${previewCount===0?'disabled':''}>${startButtonText}</button>
       </div>
     </div>
   `;
@@ -3412,7 +3417,7 @@ function submitEssayAnswer(){
     render();
   }
 }
-async function confirmExitSession(){
+async function exitSessionNow(){
   const sess = App.session;
   if (!sess){ App.view='setup'; render(); return; }
   if (sess._pendingTimer) clearTimeout(sess._pendingTimer);
@@ -3428,6 +3433,16 @@ async function confirmExitSession(){
     App.view = 'setup';
   }
   render();
+}
+function confirmExitSession(){
+  const sess = App.session;
+  if (!sess){ App.view='setup'; render(); return; }
+  confirmModal(
+    '退出本轮测试？',
+    '本轮未完成，退出后不会保存进度，也不会计入统计；已作答内容仅用于显示本次临时结果。',
+    exitSessionNow,
+    { danger:true, confirmLabel:'退出' }
+  );
 }
 
 /* ============================================================
@@ -3812,6 +3827,12 @@ function renderReportView(container){
       </div></div>
     </div>`;
   }).join('');
+  const reportActionsHtml = r.partial
+    ? `<button class="btn btn-secondary" id="report-study-btn" type="button">返回学习</button>
+        <button class="btn btn-primary" id="report-restart-btn" type="button">再来一轮</button>`
+    : `<button class="btn btn-secondary" id="report-preview-btn" type="button">整卷预览</button>
+        <button class="btn btn-secondary" id="report-study-btn" type="button">返回学习</button>
+        <button class="btn btn-primary" id="report-restart-btn" type="button">再来一轮</button>`;
 
   container.innerHTML = `
     <div class="container">
@@ -3831,9 +3852,7 @@ function renderReportView(container){
       <div class="section-title" style="margin-top:22px;">逐题详情<span class="line"></span></div>
       <div class="qa-list">${qaListHtml}</div>
       <div class="report-actions">
-        <button class="btn btn-secondary" id="report-preview-btn" type="button">${r.partial?'返回设置':'整卷预览'}</button>
-        <button class="btn btn-secondary" id="report-study-btn" type="button">返回学习</button>
-        <button class="btn btn-primary" id="report-restart-btn" type="button">再来一轮</button>
+        ${reportActionsHtml}
       </div>
     </div>
   `;
@@ -3854,8 +3873,8 @@ function renderReportView(container){
   });
   document.getElementById('report-restart-btn').onclick = startSession;
   document.getElementById('report-study-btn').onclick = ()=>{ App.view='setup'; render(); };
-  document.getElementById('report-preview-btn').onclick = ()=>{
-    if (r.partial){ App.view='setup'; render(); return; }
+  const previewBtn = document.getElementById('report-preview-btn');
+  if (previewBtn) previewBtn.onclick = ()=>{
     App.recordDetailId = r.id;
     App.view='record';
     render();
