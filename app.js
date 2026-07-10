@@ -409,6 +409,43 @@ async function registerDeck(deck){
   if (idx>=0) reg[idx]=entry; else reg.push(entry);
   await Store.setJSON(STORAGE_KEYS.deckRegistry, reg);
 }
+async function getKnownDeckIds(){
+  const ids = new Set();
+  if (App.deck && App.deck.id) ids.add(App.deck.id);
+  (App.localDecks || []).forEach(d=>d && d.id && ids.add(d.id));
+  const reg = await Store.getJSON(STORAGE_KEYS.deckRegistry, []);
+  if (Array.isArray(reg)) reg.forEach(d=>d && d.id && ids.add(d.id));
+  const p = App.progress || {};
+  ['reviewBook','wrongBook','questionStats'].forEach(k=>{
+    Object.keys(p[k] || {}).forEach(id=>ids.add(id));
+  });
+  (p.sessions || []).forEach(s=>s && s.deckId && ids.add(s.deckId));
+  return [...ids];
+}
+async function exportAllSrs(){
+  const out = {};
+  const ids = await getKnownDeckIds();
+  for (const id of ids){
+    const data = (App.deck && App.deck.id===id) ? (App.srs || {}) : await loadSrs(id);
+    if (data && Object.keys(data).length) out[id] = data;
+  }
+  return out;
+}
+async function importAllSrs(srsObj){
+  if (!srsObj || typeof srsObj!=='object') return;
+  for (const [deckId, data] of Object.entries(srsObj)){
+    if (!deckId || !data || typeof data!=='object') continue;
+    const prev = await loadSrs(deckId);
+    const merged = Object.assign({}, prev || {}, data);
+    if (App.deck && App.deck.id===deckId) App.srs = merged;
+    await Store.setJSON('srs:'+deckId, merged);
+  }
+}
+async function clearKnownSrs(){
+  const ids = await getKnownDeckIds();
+  for (const id of ids) await Store.remove('srs:'+id);
+  App.srs = {};
+}
 
 function normalizeUidList(list){
   return Array.isArray(list) ? [...new Set(list.filter(Boolean).map(String))] : [];
@@ -628,7 +665,7 @@ function toast(msg, opts={}){
   root.querySelectorAll('.toast').forEach(el=>el.remove());
   const el = document.createElement('div');
   el.className = 'toast';
-  el.innerHTML = (opts.icon ? `<span>${opts.icon}</span>` : '') + `<span>${Utils.escapeHtml(msg)}</span>`;
+  el.innerHTML = (opts.icon ? `<span class="toast-icon">${opts.icon}</span>` : '') + `<span>${Utils.escapeHtml(msg)}</span>`;
   root.appendChild(el);
   setTimeout(()=>{ el.classList.add('leaving'); setTimeout(()=>el.remove(), 260); }, opts.duration || 2600);
 }
@@ -693,7 +730,7 @@ function renderNav(){
   nav.innerHTML = `
     <div class="brand"><span class="brand-mark">🗂️</span><span class="brand-text">Spaced Memory Cards</span></div>
     <div class="nav-spacer"></div>
-    <div class="streak-pill ${streak>0?'':'streak-placeholder'}" id="streak-pill" aria-hidden="${streak>0?'false':'true'}"><span class="flame">🔥</span><span class="streak-num">${Math.max(1, streak)}</span>天</div>
+    <div class="streak-pill ${streak>0?'':'streak-placeholder'}" id="streak-pill" aria-hidden="${streak>0?'false':'true'}"><span class="flame">🔥</span><span class="streak-num">${Math.max(1, streak)}</span><span class="streak-unit">天</span></div>
     <div class="nav-tabs">
       <button type="button" class="nav-tab ${studyActive?'active':''}" data-nav="study">学习</button>
       <button type="button" class="nav-tab ${['stats','record'].includes(App.view)?'active':''}" data-nav="stats">统计</button>
@@ -1295,7 +1332,7 @@ function renderSetupView(container){
             <button type="button" class="switch ${s.flashcardScope==='due'?'on':''}" data-switch="flashcardScope" aria-label="仅复习到期卡片" aria-pressed="${s.flashcardScope==='due'}"><span class="knob"></span></button>
           </div>` : ''}
           <div class="toggle-row">
-            <div><div class="label">🎯 模拟考试模式</div><div class="desc">按各题型分值自动配比抽题，凑近满分 100 分</div></div>
+            <div><div class="label"><span class="emoji-icon">🎯</span> 模拟考试模式</div><div class="desc">按各题型分值自动配比抽题，凑近满分 100 分</div></div>
             <button type="button" class="switch ${s.mockExam?'on':''}" data-switch="mockExam" aria-label="模拟考试模式" aria-pressed="${s.mockExam?'true':'false'}"><span class="knob"></span></button>
           </div>
           ${s.mockExam ? `
@@ -3312,12 +3349,12 @@ function renderStatsView(container){
       <div class="panel">
         <p class="muted" style="font-size:12.5px;margin:0 0 12px;">当前存储方式：${Store.backend()==='cloud'?'Claude 云端会话存储（随本次对话保存）':'本机浏览器本地存储（保存在这台设备上，下次打开同一文件仍可读取）'}</p>
         <div class="settings-actions">
-          <button class="btn btn-secondary" id="export-data-btn" type="button">导出数据</button>
           <button class="btn btn-secondary" id="import-data-btn" type="button">导入数据</button>
+          <button class="btn btn-secondary" id="export-data-btn" type="button">导出数据</button>
           <button class="btn btn-danger" id="clear-history-btn" type="button">清空数据</button>
           <input type="file" id="import-data-input" class="hidden-input" accept="application/json,.json">
         </div>
-        <p class="muted" style="font-size:11.5px;margin:10px 0 0;">导出包含设置、学习记录、复习本、错题本与逐题统计；导入时自动合并已有记录。</p>
+        <p class="muted" style="font-size:11.5px;margin:10px 0 0;">导入/导出包含学习设置、错题本、复习本、学习记录、逐题统计与复习进度；导入时自动合并已有数据。</p>
       </div>
     </div>
   `;
@@ -3344,7 +3381,8 @@ function renderStatsView(container){
   document.getElementById('import-data-btn').onclick = ()=>document.getElementById('import-data-input').click();
   document.getElementById('import-data-input').onchange = (e)=>{ if (e.target.files[0]) importData(e.target.files[0]); e.target.value=''; };
   document.getElementById('clear-history-btn').onclick = ()=>{
-    confirmModal('清空全部数据？', '此操作会删除设置、连续学习天数、历史轮次、复习本、错题本与逐题统计，且无法恢复。', async ()=>{
+    confirmModal('清空全部数据？', '此操作会删除设置、连续学习天数、历史轮次、复习本、错题本、逐题统计与复习进度，且无法恢复。', async ()=>{
+      await clearKnownSrs();
       App.settings = defaultSettings();
       App.progress = defaultProgress();
       App.srs = {};
@@ -3353,7 +3391,6 @@ function renderStatsView(container){
       await saveProgress();
       await clearActiveSessionDraft();
       await Store.remove(STORAGE_KEYS.lastDeck);
-      if (App.deck) await Store.remove('srs:'+App.deck.id);
       applyTheme();
       toast('已清空数据', {icon:'🗑️'});
       render();
@@ -3388,16 +3425,18 @@ function sanitizeProgressForExport(progress){
   out.questionStats = questionStats;
   return out;
 }
-function exportAllData(){
+async function exportAllData(){
   const progress = sanitizeProgressForExport(App.progress);
+  const deckRegistry = await Store.getJSON(STORAGE_KEYS.deckRegistry, []);
   Utils.downloadJSON(`SpacedMemoryCards_数据_${Utils.todayStr()}.json`, {
     _type:'smc-data',
     version:2,
     exportedAt:Date.now(),
     settings:App.settings,
     progress,
+    deckRegistry:Array.isArray(deckRegistry) ? deckRegistry : [],
     deck:App.deck ? {id:App.deck.id, title:App.deck.meta.title} : null,
-    srs:App.deck ? {[App.deck.id]:App.srs||{}} : {}
+    srs:await exportAllSrs()
   });
   toast('数据已导出', {icon:'⬇️'});
 }
@@ -3486,13 +3525,27 @@ async function importHistoryObj(progressObj, opts={}){
   await saveProgress();
   if (!opts.silent) toast(`已导入并合并 ${newOnes.length} 条新记录`, {icon:'✅'});
 }
+async function importDeckRegistry(registry){
+  if (!Array.isArray(registry)) return;
+  const existing = await Store.getJSON(STORAGE_KEYS.deckRegistry, []);
+  const byId = new Map();
+  if (Array.isArray(existing)){
+    existing.forEach(d=>{ if (d && d.id) byId.set(d.id, d); });
+  }
+  registry.forEach(d=>{
+    if (!d || !d.id) return;
+    const prev = byId.get(d.id) || {};
+    byId.set(d.id, Object.assign({}, prev, d, {
+      lastUsed:Math.max(prev.lastUsed || 0, d.lastUsed || 0)
+    }));
+  });
+  await Store.setJSON(STORAGE_KEYS.deckRegistry, [...byId.values()]);
+}
 async function importAllDataObj(obj){
   if (obj.settings) await importConfigObj(obj.settings, {silent:true});
   if (obj.progress) await importHistoryObj(obj.progress, {silent:true});
-  if (obj.srs && App.deck && obj.srs[App.deck.id]){
-    App.srs = Object.assign({}, App.srs||{}, obj.srs[App.deck.id]);
-    await saveSrs();
-  }
+  if (obj.deckRegistry) await importDeckRegistry(obj.deckRegistry);
+  if (obj.srs) await importAllSrs(obj.srs);
   toast('数据导入完成', {icon:'✅'});
 }
 async function importData(file){

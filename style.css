@@ -1,6 +1,11 @@
 /* ============================================================
    0. 重置 & 基础
    ============================================================ */
+@font-face{
+  font-family:"SMC Apple Emoji";
+  src:url("./Apple%20Color%20Emoji.woff") format("woff");
+  font-display:block;
+}
 *,*::before,*::after{ box-sizing:border-box; }
 html,body{ height:100%; }
 body{
@@ -79,6 +84,7 @@ a{ color:inherit; }
 
   --font-display:"Noto Serif SC",serif;
   --font-num:"Newsreader",serif;
+  --emoji-font:"SMC Apple Emoji","Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",emoji,sans-serif;
   color-scheme:dark;
 }
 
@@ -160,6 +166,22 @@ html[data-theme="light"] body::before{ opacity:.35; }
 h1,h2,h3,h4{ margin:0; font-family:var(--font-display); font-weight:600; letter-spacing:.01em; }
 .num{ font-family:var(--font-num); font-style:italic; font-weight:500; }
 .streak-num{ font-weight:800; }
+.emoji-icon,
+.brand .brand-mark,
+.streak-pill .flame,
+.dropzone .dz-icon,
+.deck-info-card .deck-emoji,
+.mode-card .mode-icon,
+.big-stat .icon,
+.empty-state .e-icon,
+.toast-icon{
+  font-family:var(--emoji-font);
+  font-weight:400;
+  font-style:normal;
+  line-height:1;
+  text-rendering:auto;
+}
+.emoji-icon{ display:inline-block; vertical-align:-.08em; }
 
 :focus-visible{
   outline:2px solid var(--accent);
@@ -205,10 +227,23 @@ button:focus-visible{ outline-offset:2px; }
   background:var(--gold-bg);
   color:var(--gold);
   font-size:13px; font-weight:600;
+  line-height:1;
   border:1px solid color-mix(in srgb, var(--gold) 40%, transparent);
   white-space:nowrap;
 }
-.streak-pill .flame{ font-size:14px; filter:drop-shadow(0 0 6px color-mix(in srgb, var(--gold) 60%, transparent)); }
+.streak-pill .flame,
+.streak-pill .streak-num,
+.streak-pill .streak-unit{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  line-height:1;
+}
+.streak-pill .flame{
+  font-size:14px;
+  transform:translateY(.5px);
+  filter:drop-shadow(0 0 6px color-mix(in srgb, var(--gold) 60%, transparent));
+}
 .streak-pill.streak-placeholder{
   display:none;
   visibility:hidden;
