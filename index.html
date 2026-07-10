@@ -575,7 +575,7 @@ body.view-swipe-active{ overscroll-behavior-x:contain; }
 }
 @keyframes cardIn{ from{ opacity:0; transform:translateY(5px) scale(.994); } to{ opacity:1; transform:none; } }
 .qcard.no-enter{ animation:none; }
-.qcard.leaving{ animation:cardOut .12s ease forwards !important; }
+.qcard.leaving{ animation:cardOut .12s ease forwards !important; pointer-events:none; }
 @keyframes cardOut{ from{ opacity:1; } to{ opacity:0; } }
 .qcard.flipping{ animation:cardFlip .38s var(--ease); }
 @keyframes cardFlip{ 0%{ transform:scale(1) rotateX(0); opacity:1; } 45%{ transform:scale(.98) rotateX(5deg); opacity:.75;} 100%{ transform:scale(1) rotateX(0); opacity:1; } }
@@ -1320,7 +1320,9 @@ const Utils = {
   uid(prefix){ return prefix+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); },
   letterToIndex(letter){
     if (letter==null) return -1;
-    const c = String(letter).trim().toUpperCase().charCodeAt(0);
+    const text = String(letter).trim();
+    if (!/^[A-Za-z]$/.test(text)) return -1;
+    const c = text.toUpperCase().charCodeAt(0);
     return (c>=65 && c<=90) ? c-65 : -1;
   },
   normalizeAnswerText(s){
@@ -1495,6 +1497,35 @@ function parseDeckFile(text, filename){
   throw new Error('无法识别该文件的数据格式，已尝试 JSON / UMD模块 / 裸对象三种方式均失败。\n\n'+errors.join('\n')+'\n\n请确认文件至少包含 fillInTheBlank / singleChoice / trueFalse / shortAnswer / essay 中的一种或多种；多选题可使用 multipleChoice。');
 }
 
+function resolveChoiceAnswerIndex(options, answer){
+  if (typeof answer==='number') return answer;
+  const answerText = String(answer ?? '').trim();
+  if (!answerText) return -1;
+  const exactIdx = options.findIndex(opt=>String(opt).trim()===answerText);
+  if (exactIdx>=0) return exactIdx;
+  const answerNorm = Utils.normalizeAnswerText(answerText);
+  const normalizedIdx = options.findIndex(opt=>Utils.normalizeAnswerText(opt)===answerNorm);
+  if (normalizedIdx>=0) return normalizedIdx;
+  return Utils.letterToIndex(answerText);
+}
+function choiceAnswerList(options, answer){
+  if (Array.isArray(answer)) return answer;
+  if (typeof answer==='number') return [answer];
+  const text = String(answer || '').trim();
+  if (!text) return [];
+  return resolveChoiceAnswerIndex(options, text)>=0 ? [text] : text.split(/[,\s、，]+/).filter(Boolean);
+}
+function deckFingerprint(meta, questions){
+  const title = meta.title || 'untitled';
+  const version = meta.version || '';
+  const questionSignature = questions.map(q=>{
+    const options = q.options ? q.options.map(o=>`${o.text}:${o.correct?'1':'0'}`).join('~') : '';
+    const answers = q.answers ? q.answers.join('~') : '';
+    return [q.type, q.rawId, q.chapter, q.question, options, q.answer ?? '', answers, q.reference || ''].join('::');
+  }).join('||');
+  return [title, version, questions.length, questionSignature].join('::');
+}
+
 function normalizeDeck(raw, sourceName){
   const src = raw && raw.data && typeof raw.data==='object' ? raw.data : raw;
   if (!src || typeof src!=='object') throw new Error('数据格式无法识别：既不是题库对象，也不是标准模块导出。');
@@ -1523,13 +1554,13 @@ function normalizeDeck(raw, sourceName){
 
       if (type==='singleChoice'){
         if (!Array.isArray(q.options) || !q.options.length){ skipped.push(uid+':缺少选项'); return; }
-        const correctIdx = typeof q.answer==='number' ? q.answer : Utils.letterToIndex(q.answer);
+        const correctIdx = resolveChoiceAnswerIndex(q.options, q.answer);
         base.options = q.options.map((text,i)=>({ text:String(text), correct:i===correctIdx }));
         if (!base.options.some(o=>o.correct)){ skipped.push(uid+':未找到匹配的正确选项(answer='+q.answer+')'); return; }
       } else if (type==='multipleChoice'){
         if (!Array.isArray(q.options) || !q.options.length){ skipped.push(uid+':缺少选项'); return; }
-        const answerArr = Array.isArray(q.answer) ? q.answer : String(q.answer||'').split(/[,\s、，]+/).filter(Boolean);
-        const correctIdxs = answerArr.map(a=>typeof a==='number' ? a : Utils.letterToIndex(a)).filter(i=>i>=0);
+        const answerArr = choiceAnswerList(q.options, q.answer);
+        const correctIdxs = answerArr.map(a=>resolveChoiceAnswerIndex(q.options, a)).filter(i=>i>=0);
         const correctSet = new Set(correctIdxs);
         base.options = q.options.map((text,i)=>({ text:String(text), correct:correctSet.has(i) }));
         if (!base.options.some(o=>o.correct)){ skipped.push(uid+':未找到匹配的正确选项(answer='+JSON.stringify(q.answer)+')'); return; }
@@ -1554,7 +1585,7 @@ function normalizeDeck(raw, sourceName){
   const metaSrc = (src.meta && typeof src.meta==='object') ? src.meta : {};
   const meta = Object.assign({ title:sourceName||'未命名题库', subject:'', description:'', version:'' }, metaSrc);
   if (!metaSrc.title) meta.title = (sourceName||'未命名题库').replace(/\.(js|json)$/i,'');
-  const deckId = Utils.hashStr((meta.title||'untitled')+'::'+questions.length);
+  const deckId = Utils.hashStr(deckFingerprint(meta, questions));
   return { id:deckId, meta, questions, byType, totalQuestions:questions.length, skipped, loadedAt:Date.now() };
 }
 
@@ -2966,13 +2997,23 @@ function transitionRender(renderFn){
     renderFn();
   }
 }
+function clearPendingCompletion(sess){
+  if (!sess) return;
+  if (sess._pendingTimer){
+    clearTimeout(sess._pendingTimer);
+    sess._pendingTimer = null;
+  }
+  sess.pendingCompletion = null;
+}
 function completeCurrentCard(opts){
   opts = opts || {};
   const sess = App.session;
+  if (!sess || sess.transitionLocked) return;
+  sess.transitionLocked = true;
   const currentCard = sess.queue[0];
   saveCurrentDraftAnswer(sess, currentCard);
   const card = sess.queue.shift();
-  sess.pendingCompletion = null;
+  clearPendingCompletion(sess);
   sess.completedUids = sess.completedUids || [];
   if (card && !sess.completedUids.includes(card.uid)) sess.completedUids.push(card.uid);
   if (opts.requeue){
@@ -2985,33 +3026,59 @@ function completeCurrentCard(opts){
   if (!sess.queue.length){ finishQuizPhase(); return; }
   prepareCardState(sess, sess.queue[0]);
   sess.feedbackFlash=null; sess.lastUserInput=null; sess.lastGradeCorrect=null;
-  sess.manualSelfEval=false;
   sess.cardStartedAt = Date.now();
   persistActiveSession();
   transitionRender(render);
 }
+function cardInteractionLocked(sess){
+  return !!(sess && sess.transitionLocked);
+}
+function selfGradeReviewResultForCard(sess, card){
+  if (!sess || sess.mode!=='test' || !card) return null;
+  if (!['fillInTheBlank','shortAnswer','essay'].includes(card.type)) return null;
+  return sess.results.find(r=>r.uid===card.uid && r.ratingKey) || null;
+}
+function applySelfGradeReviewState(sess, card){
+  const result = selfGradeReviewResultForCard(sess, card);
+  if (!result) return false;
+  sess.revealed = true;
+  sess.manualSelfEval = true;
+  sess.selfGradeSelection = result.ratingKey;
+  sess.selfGradeReviewing = true;
+  return true;
+}
+function hasSessionResultForCard(sess, card){
+  return !!(sess && card && Array.isArray(sess.results) && sess.results.some(r=>r.uid===card.uid));
+}
+function goToNextAnsweredQuestion(){
+  const sess = App.session;
+  const card = sess && sess.queue && sess.queue[0];
+  if (!sess || cardInteractionLocked(sess) || sess.mode!=='test' || !card || !hasSessionResultForCard(sess, card)) return false;
+  if (sess.manualSelfEval && sess.selfGradeReviewing && sess.selfGradeSelection){
+    submitManualSelfRating(sess.selfGradeSelection);
+  } else {
+    completeCurrentCard({ requeue:false });
+  }
+  return true;
+}
 function goToPreviousQuestion(){
   const sess = App.session;
-  if (!sess || !sess.answeredStack || !sess.answeredStack.length) return;
+  if (!sess || cardInteractionLocked(sess) || !sess.answeredStack || !sess.answeredStack.length) return;
+  clearPendingCompletion(sess);
   saveCurrentDraftAnswer(sess, sess.queue[0]);
   const prevCard = sess.answeredStack.pop();
-  const prevResult = sess.results.find(r=>r.uid===prevCard.uid);
-  const keepSelfEvalResult = !!(prevResult && prevResult.ratingKey && ['fillInTheBlank','shortAnswer','essay'].includes(prevCard.type));
   if (sess.completedUids) sess.completedUids = sess.completedUids.filter(uid=>uid!==prevCard.uid);
   sess.queue.unshift(prevCard);
   restoreAnswerForCard(sess, prevCard);
-  sess.revealed=keepSelfEvalResult;
-  sess.manualSelfEval=keepSelfEvalResult;
-  sess.selfGradeSelection=keepSelfEvalResult ? prevResult.ratingKey : null;
-  sess.selfGradeReviewing=keepSelfEvalResult;
+  applySelfGradeReviewState(sess, prevCard);
   sess.feedbackFlash=null; sess.lastUserInput=null; sess.lastGradeCorrect=null;
   sess.cardStartedAt = Date.now();
-  sess.pendingCompletion = null;
   persistActiveSession();
   transitionRender(render);
 }
 function finishQuizPhase(){
   const sess = App.session;
+  if (sess) sess.transitionLocked = false;
   const hasPending = sess.results.some(r=>r.graded===false);
   if (hasPending){
     const pendingCount = sess.results.filter(r=>r.graded===false).length;
@@ -3142,6 +3209,7 @@ function renderQuizView(container){
   if (prevBtn) prevBtn.onclick = goToPreviousQuestion;
   bindCardEvents(sess, card);
   schedulePendingCompletion(sess);
+  sess.transitionLocked = false;
 }
 function schedulePendingCompletion(sess){
   if (!sess || !sess.pendingCompletion) return;
@@ -3392,7 +3460,8 @@ function renderInteractiveFace(sess, card){
     if (!sess.revealed){
       body = `<textarea class="essay-input" id="essay-input" placeholder="写下你的回答……（也可留空直接查看参考答案）">${Utils.escapeHtml(sess.userTextAnswer||'')}</textarea>`;
       const btnLabel = mode==='test' ? '确认' : '提交并查看参考答案';
-      const confirmKbd = isMobileViewport() ? '⏎' : 'Ctrl/Cmd + ⏎';
+      const shiftIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4 5 11h4v8h6v-8h4L12 4z"></path></svg>';
+      const confirmKbd = isMobileViewport() ? '⏎' : `${shiftIcon} + ⏎`;
       actions = `<div class="qcard-actions"><button type="button" class="btn btn-secondary self-eval-btn" id="self-eval-btn">自评</button><button type="button" class="btn btn-primary" id="confirm-btn">${btnLabel} <span class="kbd">${confirmKbd}</span></button></div>`;
     } else {
       const answerCls = manualAnswerMatchesReference(card, sess.userTextAnswer) ? ' correct' : ((sess.userTextAnswer&&sess.userTextAnswer.trim()) ? ' wrong' : '');
@@ -3601,7 +3670,7 @@ function bindCardEvents(sess, card){
       const ta = document.getElementById('essay-input');
       if (ta){
         ta.addEventListener('input', ()=>{ sess.userTextAnswer = ta.value; persistActiveSession(); });
-        ta.addEventListener('keydown', e=>{ if ((e.metaKey||e.ctrlKey) && e.key==='Enter'){ e.preventDefault(); submitEssayAnswer(); } });
+        ta.addEventListener('keydown', e=>{ if (!isMobileViewport() && e.shiftKey && e.key==='Enter'){ e.preventDefault(); submitEssayAnswer(); } });
       }
       const selfEvalBtn = document.getElementById('self-eval-btn');
       if (selfEvalBtn) selfEvalBtn.onclick = beginManualSelfEval;
@@ -3630,6 +3699,7 @@ function flipCurrentCard(){
 }
 function submitFlashcardRating(ratingKey){
   const sess = App.session, card = sess.queue[0];
+  if (cardInteractionLocked(sess)) return;
   const g = gradeFlashcardRating(card, ratingKey);
   recordResult(card, g);
   const newSrsState = applySrsRating(App.srs[card.uid], ratingKey);
@@ -3676,6 +3746,7 @@ function saveCurrentDraftAnswer(sess, card){
 function prepareCardState(sess, card){
   resetAnswerStateForCard(sess, card);
   if (sess.mode==='test') restoreAnswerForCard(sess, card);
+  applySelfGradeReviewState(sess, card);
 }
 function restoreAnswerForCard(sess, card){
   const saved = (sess.answersByUid||{})[card.uid];
@@ -3690,6 +3761,7 @@ function restoreAnswerForCard(sess, card){
 }
 function submitObjectiveAnswer(userInput){
   const sess = App.session;
+  if (cardInteractionLocked(sess)) return;
   if (sess.mode==='test'){
     const card = sess.queue[0];
     stashAnswerForCard(sess, card, userInput);
@@ -3702,6 +3774,7 @@ function submitObjectiveAnswer(userInput){
 }
 function submitLearnObjective(userInput){
   const sess = App.session, card = sess.queue[0];
+  if (cardInteractionLocked(sess)) return;
   const g = gradeObjective(card, userInput);
   recordResult(card, g);
   sess.feedbackFlash = g.isCorrect ? 'good' : 'bad';
@@ -3716,6 +3789,7 @@ function submitLearnObjective(userInput){
 }
 function submitLearnSubjective(ratingKey){
   const sess = App.session, card = sess.queue[0];
+  if (cardInteractionLocked(sess)) return;
   const g = gradeSubjective(card, sess.userTextAnswer, ratingKey);
   recordResult(card, g);
   const requeueNeeded = g.pct<80 && (sess.requeueCounts[card.uid]||0) < 1;
@@ -3724,7 +3798,7 @@ function submitLearnSubjective(ratingKey){
 }
 function beginManualSelfEval(){
   const sess = App.session, card = sess && sess.queue[0];
-  if (!sess || !card) return;
+  if (!sess || !card || cardInteractionLocked(sess)) return;
   sess.manualSelfEval = true;
   sess.revealed = true;
   sess.selfGradeSelection = null;
@@ -3734,7 +3808,7 @@ function beginManualSelfEval(){
 }
 function chooseManualSelfRating(ratingKey){
   const sess = App.session;
-  if (!sess) return;
+  if (!sess || cardInteractionLocked(sess)) return;
   if (sess.selfGradeReviewing){
     sess.selfGradeSelection = ratingKey;
     persistActiveSession();
@@ -3745,7 +3819,7 @@ function chooseManualSelfRating(ratingKey){
 }
 function submitManualSelfRating(ratingKey){
   const sess = App.session, card = sess && sess.queue[0];
-  if (!sess || !card) return;
+  if (!sess || !card || cardInteractionLocked(sess)) return;
   ratingKey = ratingKey || sess.selfGradeSelection;
   if (!ratingKey) return;
   const points = Number(App.settings.points[card.type])||0;
@@ -3763,6 +3837,7 @@ function submitManualSelfRating(ratingKey){
 }
 function submitEssayAnswer(){
   const sess = App.session, card = sess.queue[0];
+  if (cardInteractionLocked(sess)) return;
   if (sess.mode==='test'){
     stashAnswerForCard(sess, card, sess.userTextAnswer);
     if (manualTextMatchesReference(sess.userTextAnswer, card.reference)) recordResult(card, gradeSubjectiveExact(card, sess.userTextAnswer));
@@ -3871,10 +3946,14 @@ function handleGlobalKeydown(e){
   if (!card) return;
   const activeTag = document.activeElement && document.activeElement.tagName;
   const inTextField = activeTag==='INPUT' || activeTag==='TEXTAREA';
+  const currentAnswered = hasSessionResultForCard(sess, card);
 
   if (e.key==='Escape'){ e.preventDefault(); confirmExitSession(); return; }
-  if (e.key==='ArrowLeft' && sess.mode==='test' && sess.answeredStack && sess.answeredStack.length && !inTextField){
+  if (e.key==='ArrowLeft' && sess.mode==='test' && sess.answeredStack && sess.answeredStack.length && (!inTextField || currentAnswered)){
     e.preventDefault(); goToPreviousQuestion(); return;
+  }
+  if (e.key==='ArrowRight' && sess.mode==='test' && currentAnswered){
+    e.preventDefault(); goToNextAnsweredQuestion(); return;
   }
 
   if (sess.mode==='flashcard'){
@@ -3898,7 +3977,7 @@ function handleGlobalKeydown(e){
     }
     return;
   }
-  if (inTextField) return; // 交给输入框自身的 keydown 处理 Enter / Ctrl+Enter
+  if (inTextField) return; // 交给输入框自身的 keydown 处理 Enter / Shift+Enter
   if (card._perBlankChoice){
     const active = Utils.clamp(sess.activeBlankIdx||0, 0, card._blankOptions.length-1);
     const idx = +e.key-1;
